@@ -13,6 +13,8 @@
   "dependencies": {
     "node-cron": "^3.0.3",
     "node-fetch": "^3.3.2",
-    "nodemailer": "^6.9.13"
+    "nodemailer": "^6.9.13",
+    "puppeteer": "^22.12.0",
+    "x-crawl": "^10.0.1"
   }
 }

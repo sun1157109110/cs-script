@@ -11,6 +11,24 @@ const EMAIL_USER = '1157109110@qq.com'
 const EMAIL_PASS = 'slddzoqlrzeghdad'
 const RECEIVER_EMAIL = 'sun1157109110@163.com'
 const BAIDU_TRANSLATE_API_URL = 'https://fanyi-api.baidu.com/api/trans/vip/translate';
+//错误重传
+async function fetchWithRetry(url, options = {}, retries = 3, backoff = 300) {
+  try {
+    const response = await fetch(url, options);
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();  // 返回解析后的 JSON
+  } catch (error) {
+    if (retries > 0) {
+      console.error(`Fetch failed: ${error.message}. Retrying in ${backoff} ms...`);
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      return fetchWithRetry(url, options, retries - 1, backoff * 2);  // 递归调用，指数退避
+    } else {
+      throw error;
+    }
+  }
+}
 // 初始化邮件发送器
 const transporter = nodemailer.createTransport({
   service: 'qq',
@@ -38,8 +56,8 @@ const translateText = async (text) => {
   const salt = Math.random().toString();
   const sign = crypto.createHash('md5').update(BAIDU_TRANSLATE_APPID + text + salt + BAIDU_TRANSLATE_KEY).digest('hex');
   try {
-    const response = await fetch(`${BAIDU_TRANSLATE_API_URL}?q=${encodeURI(text)}&from=auto&to=zh&appid=${BAIDU_TRANSLATE_APPID}&salt=${salt}&sign=${sign}`);
-    const data = await response.json();
+    const data = await fetchWithRetry(`${BAIDU_TRANSLATE_API_URL}?q=${encodeURI(text)}&from=auto&to=zh&appid=${BAIDU_TRANSLATE_APPID}&salt=${salt}&sign=${sign}`);
+    // const data = await response.json();
     if (data.trans_result) {
       return data.trans_result[0].dst;
     }
@@ -52,8 +70,8 @@ const translateText = async (text) => {
 
 async function getCSGOUpdateNews() {
   try {
-    const response = await fetch(`${STEAM_API_URL}?appid=${APP_ID}&count=1&maxlength=300&format=json`);
-    const data = await response.json();
+    const data= await fetchWithRetry(`${STEAM_API_URL}?appid=${APP_ID}&count=1&maxlength=300&format=json`);
+    // const data = await response.json();
     const newsItems = data.appnews.newsitems;
     if (newsItems.length > 0) {
       return newsItems[0];
@@ -68,7 +86,7 @@ const checkUpdates = async () => {
 
   try {
     const updateNews = await getCSGOUpdateNews();
-    if (updateNews.gid !== lastNewsGid) {
+    if (updateNews &&updateNews.gid !== lastNewsGid) {
       lastNewsGid = updateNews.gid;
       const translatedText = await translateText(updateNews.contents);
       await sendEmail('CS:GO 更新公告' + updateNews.title, translatedText)
